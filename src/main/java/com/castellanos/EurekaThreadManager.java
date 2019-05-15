@@ -1,10 +1,12 @@
 package com.castellanos;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.List;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 
@@ -14,29 +16,29 @@ import java.util.concurrent.Executors;
 public class EurekaThreadManager {
 	private static EurekaThreadManager INSTANCE;
 	private int nThreads = 10;
-	private ConcurrentHashMap<String, EurekaTaskExecution> map;
-	private ExecutorService pool;
+	private ThreadPoolExecutor poolExecutor;
+	private LinkedBlockingQueue<Runnable> taskQueue;
+	private List<Runnable> running;
 
 	private EurekaThreadManager() {
-		setMap(new ConcurrentHashMap<String, EurekaTaskExecution>());
-		pool = Executors.newFixedThreadPool(nThreads);
-		// Monitor elimina elemento que ya este listo del map
-		new Thread(() -> {
-			while (true) {
-				try {
-					Thread.sleep(5000);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-				Iterator<Entry<String, EurekaTaskExecution>> iterator = map.entrySet().iterator();
-				while (iterator.hasNext()) {
-					Entry<String, EurekaTaskExecution> entry = iterator.next();
-					if (entry.getValue().isReady()) {
-						iterator.remove();
-					}
-				}
+		taskQueue = new LinkedBlockingQueue<Runnable>();
+		running = Collections.synchronizedList(new ArrayList<Runnable>());
+		poolExecutor = new ThreadPoolExecutor(4, nThreads, 60, TimeUnit.SECONDS, taskQueue) {
+			@Override
+			protected void beforeExecute(Thread t, Runnable r) {
+				// TODO Auto-generated method stub
+				super.beforeExecute(t, r);
+				running.add(r);
 			}
-		}).start();
+
+			@Override
+			protected void afterExecute(Runnable r, Throwable t) {
+				// TODO Auto-generated method stub
+				super.afterExecute(r, t);
+				running.remove(r);
+				postExecute(r);
+			}
+		};
 	}
 
 	private synchronized static void createInstance() {
@@ -52,19 +54,47 @@ public class EurekaThreadManager {
 		return INSTANCE;
 	}
 
-	public ConcurrentHashMap<String, EurekaTaskExecution> getMap() {
-		return map;
+	public void taskExecute(EurekaTask task) {
+		poolExecutor.execute(new EurekaTaskRunnable(task));
 	}
+	/**
+	 * See if the task ID exists in the execution of tasks or the task queue.
+	 * @param id Eureka task id
+	 * @return EurekaTaskRunnable from running/taskQueue
+	 */
+	public EurekaTaskRunnable getStatus(String id) {
+		EurekaTaskRunnable t;
+		for (Runnable r : running) {
+			if (r instanceof EurekaTaskRunnable) {
+				t = (EurekaTaskRunnable) r;
+				if (t.getUuid().equals(id)) {
+					return t;
+				}
+			}
+		}
+		Iterator<Runnable> iterator = taskQueue.iterator();
+		while (iterator.hasNext()) {
+			Runnable r = iterator.next();
+			if (r instanceof EurekaTaskRunnable) {
+				t = (EurekaTaskRunnable) r;
+				if (t.getUuid().equals(id)) {
+					return t;
+				}
+			}
+		}
 
-	private void setMap(ConcurrentHashMap<String, EurekaTaskExecution> map) {
-		this.map = map;
+		return null;
 	}
-
-	public String executeTask(EurekaTask t) {
-		EurekaTaskExecution r = new EurekaTaskExecution(t);
-		map.put(t.getUuid(), r);
-		pool.execute(r);
-		return r.getUuid();
+	
+	/**
+	 * Send an email notification to the user with the url to the results file or 
+	 * the reasons for error so that the task will not be completed.
+	 * @param r EurekaTaskRunnable
+	 */
+	private void postExecute(Runnable r) {
+		if(r instanceof EurekaTaskRunnable) {
+			EurekaTaskRunnable t = (EurekaTaskRunnable) r;
+		}
 	}
 
 	public int getnThreads() {
@@ -74,13 +104,12 @@ public class EurekaThreadManager {
 	public void setnThreads(int nThreads) {
 		this.nThreads = nThreads;
 	}
-
-	public ExecutorService getPool() {
-		return pool;
-	}
-
-	public void setPool(ExecutorService pool) {
-		this.pool = pool;
+	/**
+	 * Return all running task 
+	 * @return List 
+	 */
+	public List<Runnable> getRunning() {
+		return running;
 	}
 
 }

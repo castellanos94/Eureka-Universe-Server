@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+
 /**
  * 
  * @author Castellanos Alvarez Alejandro
@@ -39,17 +40,26 @@ public class EurekaServerController {
 	@GetMapping(path = "/tasks")
 	public @ResponseBody List<String> getAllTasks() {
 		List<String> l = new ArrayList<String>();
-		manager.getMap().forEach((k, v) -> l.add(v.toString()));
+		for (Runnable r : manager.getRunning()) {
+
+		}
 		return l;
 	}
 
 	@GetMapping(path = "/tasks/{id}")
 	public @ResponseBody BaseResponse checkStatus(@PathVariable("id") String id) {
-		EurekaTaskExecution t = manager.getMap().get(id);
+		EurekaTaskRunnable t = manager.getStatus(id);
 		BaseResponse br = new BaseResponse();
-		br.setCode(100);
-		br.setStatus((t.isAlive()) ? "Running..." : "Finished");
-		br.setMsg((t.getConsole().isEmpty()) ? "" : t.getConsole().get(t.getConsole().size() - 1));
+		if (t != null) {
+			br.setCode(100);
+			br.setStatus((t.getStart() != null) ? "Running..." : "Waiting...");
+			br.setMsg((t.getConsole().isEmpty()) ? "" : t.getConsole().get(t.getConsole().size() - 1));
+		} else {
+			// Buscar en assestore
+			br.setCode(400);
+			br.setStatus("unknow");
+			br.setMsg((t.getConsole().isEmpty()) ? "" : t.getConsole().get(t.getConsole().size() - 1));
+		}
 		return br;
 	}
 
@@ -61,7 +71,7 @@ public class EurekaServerController {
 		task.setDataset(null);
 		task.setUserId(0);
 		// guardar en base de datos?
-		manager.executeTask(task);
+		manager.taskExecute(task);
 		return task.getUuid();
 	}
 
