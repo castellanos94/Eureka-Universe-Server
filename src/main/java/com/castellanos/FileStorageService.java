@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -56,7 +55,11 @@ public class FileStorageService {
             throw new FileStorageException("Could not store file " + fileName + ". Please try again!", ex);
         }
     }
+    public Boolean checkResults(String id){
+        Path filePath = this.fileStorageLocation.resolve(id).resolve("result.xls").normalize();
+        return filePath.toFile().exists();
 
+    }
     public Resource loadFileAsResource(String fileName) {
         try {
             Path filePath = this.fileStorageLocation.resolve(fileName).resolve("result.xls").normalize();

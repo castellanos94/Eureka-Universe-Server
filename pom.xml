@@ -39,6 +39,13 @@
 			<groupId>javax.servlet</groupId>
 			<artifactId>javax.servlet-api</artifactId>
 			</dependency>
+			<!-- java edn -->
+        <dependency>
+            <groupId>us.bpsm</groupId>
+            <artifactId>edn-java</artifactId>
+            <version>0.5.0</version>
+        </dependency>
+       
 	</dependencies>
 
 	<build>

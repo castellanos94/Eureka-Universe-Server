@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 
+import javax.annotation.PreDestroy;
 import javax.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
@@ -64,7 +65,7 @@ public class EurekaServerController {
 	@GetMapping(path = "/tasks")
 	public @ResponseBody List<String> getAllTasks() {
 		List<String> l = new ArrayList<String>();
-		EurekaTaskRunnable t=null;
+		EurekaTaskRunnable t = null;
 		for (Runnable r : manager.getRunning()) {
 			if (r instanceof EurekaTaskRunnable) {
 				t = (EurekaTaskRunnable) r;
@@ -76,26 +77,23 @@ public class EurekaServerController {
 	}
 
 	@GetMapping(path = "/tasks/{id}")
-	public @ResponseBody BaseResponse checkStatus(@PathVariable("id") String id) {
-		EurekaTaskRunnable t=null;
+	public @ResponseBody String checkStatus(@PathVariable("id") String id) {
+
+		String t = null;
 		try {
 			t = manager.getStatus(id);
+			if (t != null){
+				return t;
+			}
+			else if (fileStorageService.checkResults(id)){
+				return "/downloadFile/"+id;
+			}
 		} catch (InterruptedException | ExecutionException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		BaseResponse br = new BaseResponse();
-		if (t != null) {
-			br.setCode(100);
-			br.setStatus((t.getStart() != null) ? "Running..." : "Waiting...");
-			br.setMsg((t.getConsole().isEmpty()) ? "" : t.getConsole().get(t.getConsole().size() - 1));
-		} else {
-			// Buscar en assestore
-			br.setCode(400);
-			br.setStatus("unknow");
-			br.setMsg("id : " + id + " not found.");
-		}
-		return br;
+
+		return id + " not found";
 	}
 
 	@PostMapping(path = "/tasks")
@@ -104,40 +102,44 @@ public class EurekaServerController {
 		modelMap.addAttribute("name", name);
 		modelMap.addAttribute("script", script);
 		modelMap.addAttribute("file", file);
-		
+
 		EurekaTask task = new EurekaTask();
-		String path = fileStorageService.storeFile(task.getUuid(),file);
+		String path = fileStorageService.storeFile(task.getUuid(), file);
 
 		task.setName(name);
 		task.setScript(script);
-		task.setDataset(path+File.separator+file.getOriginalFilename());
+		task.setDataset(path + File.separator + file.getOriginalFilename());
 		task.setUserId(0);
 		task.setBasePath(path);
-		manager.taskExecute(fileStorageService.getCore() ,task);
+		manager.taskExecute(fileStorageService.getCore(), task);
 		return task.getUuid();
 	}
+
 	@GetMapping("/downloadFile/{fileName:.+}")
-    public ResponseEntity<Resource> downloadFile(@PathVariable String fileName, HttpServletRequest request) {
-        // Load file as Resource
+	public ResponseEntity<Resource> downloadFile(@PathVariable String fileName, HttpServletRequest request) {
+		// Load file as Resource
 		Resource resource = fileStorageService.loadFileAsResource(fileName);
-		
-        // Try to determine file's content type
-        String contentType = null;
-        try {
-            contentType = request.getServletContext().getMimeType(resource.getFile().getAbsolutePath());
-        } catch (IOException ex) {
-            logger.info("Could not determine file type.");
-        }
 
-        // Fallback to the default content type if type could not be determined
-        if(contentType == null) {
-            contentType = "application/octet-stream";
-        }
+		// Try to determine file's content type
+		String contentType = null;
+		try {
+			contentType = request.getServletContext().getMimeType(resource.getFile().getAbsolutePath());
+		} catch (IOException ex) {
+			logger.info("Could not determine file type.");
+		}
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(contentType))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
-                .body(resource);
-    }
+		// Fallback to the default content type if type could not be determined
+		if (contentType == null) {
+			contentType = "application/octet-stream";
+		}
 
+		return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType))
+				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
+				.body(resource);
+	}
+
+	@PreDestroy
+	private void onDestroy() {
+		manager.onDestroy();
+	}
 }

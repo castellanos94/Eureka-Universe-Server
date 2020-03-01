@@ -10,6 +10,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+
 /**
  * 
  * @author Castellanos Alvarez Alejandro
@@ -21,22 +22,22 @@ public class EurekaThreadManager {
 	private ThreadPoolExecutor poolExecutor;
 	private LinkedBlockingQueue<Runnable> taskQueue;
 	private List<Runnable> running;
+	private List<EurekaTaskRunnable> monitor;
 
 	private EurekaThreadManager() {
 		taskQueue = new LinkedBlockingQueue<Runnable>();
 		running = Collections.synchronizedList(new ArrayList<Runnable>());
+		monitor = Collections.synchronizedList(new ArrayList<EurekaTaskRunnable>());
 		poolExecutor = new ThreadPoolExecutor(4, nThreads, 60, TimeUnit.SECONDS, taskQueue) {
 			@Override
 			protected void beforeExecute(Thread t, Runnable r) {
-				// TODO Auto-generated method stub
 				super.beforeExecute(t, r);
-				System.out.println(r);
+
 				running.add(r);
 			}
 
 			@Override
 			protected void afterExecute(Runnable r, Throwable t) {
-				// TODO Auto-generated method stub
 				super.afterExecute(r, t);
 				running.remove(r);
 				postExecute(r);
@@ -58,37 +59,33 @@ public class EurekaThreadManager {
 	}
 
 	public void taskExecute(String core_path, EurekaTask task) {
-		poolExecutor.submit(new EurekaTaskRunnable(core_path, task));
+		EurekaTaskRunnable t = new EurekaTaskRunnable(core_path, task);
+		monitor.add(t);
+		poolExecutor.submit(t);
 
+	}
+
+	public void onDestroy() {
+		System.out.println("Method invoke: destroy");
+		poolExecutor.shutdown();
 	}
 
 	/**
 	 * See if the task ID exists in the execution of tasks or the task queue.
 	 * 
 	 * @param id Eureka task id
-	 * @return EurekaTaskRunnable from running/taskQueue
+	 * @return Status from monitor
 	 * @throws ExecutionException
 	 * @throws InterruptedException
 	 */
-	public EurekaTaskRunnable getStatus(String id) throws InterruptedException, ExecutionException {
+	public String getStatus(String id) throws InterruptedException, ExecutionException {
 		EurekaTaskRunnable t;
-		for (Runnable r : running) {
-			if (r instanceof EurekaTaskRunnable) {
-				t = (EurekaTaskRunnable) r;
-				if (t.getUuid().equals(id)) {
-					return t;
-				}
-			} 
-		}
-		Iterator<Runnable> iterator = taskQueue.iterator();
+		Iterator<EurekaTaskRunnable> iterator = monitor.iterator();
 		while (iterator.hasNext()) {
-			Runnable r = iterator.next();
-			if (r instanceof EurekaTaskRunnable) {
-				t = (EurekaTaskRunnable) r;
-				if (t.getUuid().equals(id)) {
-					return t;
-				}
-			} 
+			t = iterator.next();
+			if (t.getUuid().equals(id)) {
+				return t.toString();
+			}
 		}
 
 		return null;
@@ -101,11 +98,19 @@ public class EurekaThreadManager {
 	 * @param r EurekaTaskRunnable
 	 */
 	private void postExecute(Runnable r) {
-		if (r instanceof EurekaTaskRunnable) {
-			EurekaTaskRunnable t = (EurekaTaskRunnable) r;
-			System.out.println(t);
+		EurekaTaskRunnable t = null;
+		try {
+			t = (EurekaTaskRunnable) ((FutureTask) r).get();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (ExecutionException e) {
+			e.printStackTrace();
 		}
-		System.out.println("**** " + r);
+		if (t != null) {
+			monitor.remove(t);
+
+		}
+
 	}
 
 	public int getnThreads() {
@@ -125,4 +130,7 @@ public class EurekaThreadManager {
 		return running;
 	}
 
+	public List<EurekaTaskRunnable> getMonitor() {
+		return monitor;
+	}
 }

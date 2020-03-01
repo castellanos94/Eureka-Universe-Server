@@ -5,11 +5,18 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Scanner;
+import java.util.concurrent.Callable;
+import java.util.Map;
+import us.bpsm.edn.Keyword;
+import us.bpsm.edn.parser.Parseable;
+import us.bpsm.edn.parser.Parser;
+import us.bpsm.edn.parser.Parsers;
 
 /**
  * 
@@ -17,7 +24,7 @@ import java.util.Scanner;
  *         hay cambio.
  *
  */
-public class EurekaTaskRunnable implements Runnable {
+public class EurekaTaskRunnable implements Callable {
 	private String uuid;
 	private String start;
 	private EurekaTask task;
@@ -34,8 +41,34 @@ public class EurekaTaskRunnable implements Runnable {
 		this.core_path = core_path;
 	}
 
+	public boolean isReady() {
+		return ready;
+	}
+
 	@Override
-	public void run() {
+	public String toString() {
+		return String.format("id: %s, start: %s, name: %s, log : %s", uuid, start, task.getName(), console.toString().replaceAll(task.getBasePath(), ""));
+	}
+
+	public String getUuid() {
+		return uuid;
+	}
+
+	public ArrayList<String> getConsole() {
+		return console;
+	}
+
+	public boolean containsError() {
+		return console.toString().contains("error") || console.toString().contains("exception")
+				|| !console.toString().contains("results saved");
+	}
+
+	public String getStart() {
+		return start;
+	}
+
+	@Override
+	public Object call() throws Exception {
 		this.start = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new Date());
 		String command;
 		String outPath = task.getBasePath() + File.separator + "result.xls";
@@ -45,28 +78,23 @@ public class EurekaTaskRunnable implements Runnable {
 		FileWriter fw;
 
 		try {
+			Parseable pbr = Parsers.newParseable(new StringReader(task.getScript()));
+			Parser p = Parsers.newParser(Parsers.defaultConfiguration());
+			Map<?, ?> map = (Map<?, ?>) p.nextValue(pbr);
+
+			Keyword jobKey = Keyword.newKeyword("job"), queryKey = Keyword.newKeyword("query"),
+					dbKey = Keyword.newKeyword("db-uri"), dbOut = Keyword.newKeyword("out-file");
+			Map<?, ?> queryMap = (Map<?, ?>) map.get(queryKey);
+			String path = (String) queryMap.get(dbKey);
+			String out = (String) queryMap.get(dbOut);
+			pbr.close();
+			String string_script = task.getScript().replace(path, task.getDataset()).replace(out, outPath);
+			
 			fw = new FileWriter(script);
 
-			fw.write(task.getScript());
+			fw.write(string_script);
 			fw.close();
-			String st = "";
-			Scanner sc = new Scanner(script);
-			while (sc.hasNext()) {
-				String line = sc.nextLine();
-				if (line.contains(":db-uri")) {
-					String before = line.substring(0, line.indexOf(":db-uri"));
-					st += before + ":db-uri " + '"'+task.getDataset()+'"';
-
-				} else if (line.contains(":out-file")) {
-					st += line.substring(0, line.indexOf(":out-file")) + ":out-file " + '"'+outPath+'"';
-				} else {
-					st += line;
-				}
-			}
-			sc.close();
-			fw = new FileWriter(script);
-			fw.write(st);
-			fw.close();
+		
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
@@ -87,7 +115,7 @@ public class EurekaTaskRunnable implements Runnable {
 		}
 		this.ready = true;
 
-		console.add(Arrays.toString(order));
+		//console.add(Arrays.toString(order));
 		System.out.println(Arrays.toString(order));
 		Runtime runtime = Runtime.getRuntime();
 		Process pr = null;
@@ -107,7 +135,6 @@ public class EurekaTaskRunnable implements Runnable {
 				console.add(line);
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
@@ -117,36 +144,9 @@ public class EurekaTaskRunnable implements Runnable {
 			console.add("Exit value " + exitVal);
 
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
-	}
-
-	public boolean isReady() {
-		return ready;
-	}
-
-	@Override
-	public String toString() {
-		return String.format("%s %s %s", uuid, start, task.getName());
-	}
-
-	public String getUuid() {
-		return uuid;
-	}
-
-	public ArrayList<String> getConsole() {
-		return console;
-	}
-
-	public boolean containsError() {
-		return console.toString().contains("error") || console.toString().contains("exception")
-				|| !console.toString().contains("results saved");
-	}
-
-	public String getStart() {
-		return start;
+		return this;
 	}
 
 }
