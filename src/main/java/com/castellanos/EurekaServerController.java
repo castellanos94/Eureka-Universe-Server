@@ -1,9 +1,21 @@
 package com.castellanos;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import javax.servlet.http.HttpServletRequest;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.Resource;
+
+import org.springframework.ui.ModelMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
  * 
@@ -20,8 +34,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping(path = "/demo")
 public class EurekaServerController {
+	private static final Logger logger = LoggerFactory.getLogger(EurekaServerController.class);
+
+    @Autowired
+	private FileStorageService fileStorageService;
+	
 	private EurekaThreadManager manager = EurekaThreadManager.getInstance();
 	private HashMap<Long, UserDao> users = new HashMap<Long, UserDao>();
+
 	private long ids = 0;
 
 	@PostMapping(path = "/users")
@@ -41,7 +61,7 @@ public class EurekaServerController {
 	public @ResponseBody List<String> getAllTasks() {
 		List<String> l = new ArrayList<String>();
 		for (Runnable r : manager.getRunning()) {
-
+			l.add(r.toString());
 		}
 		return l;
 	}
@@ -58,21 +78,53 @@ public class EurekaServerController {
 			// Buscar en assestore
 			br.setCode(400);
 			br.setStatus("unknow");
-			br.setMsg((t.getConsole().isEmpty()) ? "" : t.getConsole().get(t.getConsole().size() - 1));
+			br.setMsg("id : " + id + " not found.");
 		}
 		return br;
 	}
 
 	@PostMapping(path = "/tasks")
-	public @ResponseBody String runTask(@RequestParam String name, @RequestParam String script) {
+	public @ResponseBody String runTask(@RequestParam String name, @RequestParam String script,
+			@RequestParam MultipartFile file, ModelMap modelMap) {
+		modelMap.addAttribute("name", name);
+		modelMap.addAttribute("script", script);
+		modelMap.addAttribute("file", file);
+		System.out.println(file.getOriginalFilename()+" "+file.getSize()+" "+file.getContentType());
+		
 		EurekaTask task = new EurekaTask();
+		String fileName = fileStorageService.storeFile(task.getUuid(),file);
+
+        System.out.println(fileName);
 		task.setName(name);
 		task.setScript(script);
-		task.setDataset(null);
+		task.setDataset(fileName);
 		task.setUserId(0);
-		// guardar en base de datos?
+		System.out.println(task);
 		manager.taskExecute(task);
 		return task.getUuid();
 	}
+	@GetMapping("/downloadFile/{fileName:.+}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable String fileName, HttpServletRequest request) {
+        // Load file as Resource
+		Resource resource = fileStorageService.loadFileAsResource(fileName);
+		
+        // Try to determine file's content type
+        String contentType = null;
+        try {
+            contentType = request.getServletContext().getMimeType(resource.getFile().getAbsolutePath());
+        } catch (IOException ex) {
+            logger.info("Could not determine file type.");
+        }
+
+        // Fallback to the default content type if type could not be determined
+        if(contentType == null) {
+            contentType = "application/octet-stream";
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
+                .body(resource);
+    }
 
 }

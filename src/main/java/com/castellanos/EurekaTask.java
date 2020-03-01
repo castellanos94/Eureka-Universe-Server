@@ -1,5 +1,7 @@
 package com.castellanos;
 
+import java.util.UUID;
+
 public class EurekaTask {
 	private String uuid;
 	private long userId;
@@ -7,11 +9,11 @@ public class EurekaTask {
 	private String script;
 	private String dataset;
 	private String resultFile;
+	public EurekaTask(){
+		this.uuid = UUID.randomUUID().toString();
+	}
 	public String getUuid() {
 		return uuid;
-	}
-	public void setUuid(String uuid) {
-		this.uuid = uuid;
 	}
 	public long getUserId() {
 		return userId;
@@ -42,6 +44,12 @@ public class EurekaTask {
 	}
 	public void setScript(String script) {
 		this.script = script;
+	}
+
+	@Override
+	public String toString() {
+		return "EurekaTask [dataset=" + dataset + ", name=" + name + ", resultFile=" + resultFile + ", script=" + script
+				+ ", userId=" + userId + ", uuid=" + uuid + "]";
 	}
 	
 }

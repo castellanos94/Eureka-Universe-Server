@@ -94,6 +94,7 @@ public class EurekaThreadManager {
 	private void postExecute(Runnable r) {
 		if(r instanceof EurekaTaskRunnable) {
 			EurekaTaskRunnable t = (EurekaTaskRunnable) r;
+			System.out.println(t);
 		}
 	}
 
