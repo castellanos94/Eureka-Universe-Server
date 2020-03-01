@@ -9,8 +9,15 @@ public class EurekaTask {
 	private String script;
 	private String dataset;
 	private String resultFile;
+	private String base_paht;
 	public EurekaTask(){
 		this.uuid = UUID.randomUUID().toString();
+	}
+	public String getBasePath(){
+		return base_paht;
+	}
+	public void setBasePath(String base){
+		this.base_paht = base;
 	}
 	public String getUuid() {
 		return uuid;

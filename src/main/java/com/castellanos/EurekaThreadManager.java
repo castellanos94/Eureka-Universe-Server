@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -28,6 +30,7 @@ public class EurekaThreadManager {
 			protected void beforeExecute(Thread t, Runnable r) {
 				// TODO Auto-generated method stub
 				super.beforeExecute(t, r);
+				System.out.println(r);
 				running.add(r);
 			}
 
@@ -54,15 +57,20 @@ public class EurekaThreadManager {
 		return INSTANCE;
 	}
 
-	public void taskExecute(EurekaTask task) {
-		poolExecutor.execute(new EurekaTaskRunnable(task));
+	public void taskExecute(String core_path, EurekaTask task) {
+		poolExecutor.submit(new EurekaTaskRunnable(core_path, task));
+
 	}
+
 	/**
 	 * See if the task ID exists in the execution of tasks or the task queue.
+	 * 
 	 * @param id Eureka task id
 	 * @return EurekaTaskRunnable from running/taskQueue
+	 * @throws ExecutionException
+	 * @throws InterruptedException
 	 */
-	public EurekaTaskRunnable getStatus(String id) {
+	public EurekaTaskRunnable getStatus(String id) throws InterruptedException, ExecutionException {
 		EurekaTaskRunnable t;
 		for (Runnable r : running) {
 			if (r instanceof EurekaTaskRunnable) {
@@ -70,7 +78,7 @@ public class EurekaThreadManager {
 				if (t.getUuid().equals(id)) {
 					return t;
 				}
-			}
+			} 
 		}
 		Iterator<Runnable> iterator = taskQueue.iterator();
 		while (iterator.hasNext()) {
@@ -80,22 +88,24 @@ public class EurekaThreadManager {
 				if (t.getUuid().equals(id)) {
 					return t;
 				}
-			}
+			} 
 		}
 
 		return null;
 	}
-	
+
 	/**
-	 * Send an email notification to the user with the url to the results file or 
+	 * Send an email notification to the user with the url to the results file or
 	 * the reasons for error so that the task will not be completed.
+	 * 
 	 * @param r EurekaTaskRunnable
 	 */
 	private void postExecute(Runnable r) {
-		if(r instanceof EurekaTaskRunnable) {
+		if (r instanceof EurekaTaskRunnable) {
 			EurekaTaskRunnable t = (EurekaTaskRunnable) r;
 			System.out.println(t);
 		}
+		System.out.println("**** " + r);
 	}
 
 	public int getnThreads() {
@@ -105,9 +115,11 @@ public class EurekaThreadManager {
 	public void setnThreads(int nThreads) {
 		this.nThreads = nThreads;
 	}
+
 	/**
-	 * Return all running task 
-	 * @return List 
+	 * Return all running task
+	 * 
+	 * @return List
 	 */
 	public List<Runnable> getRunning() {
 		return running;

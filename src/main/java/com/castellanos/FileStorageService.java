@@ -51,7 +51,7 @@ public class FileStorageService {
             
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-            return fileName;
+            return subDir.toFile().getAbsolutePath();
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file " + fileName + ". Please try again!", ex);
         }
@@ -59,7 +59,7 @@ public class FileStorageService {
 
     public Resource loadFileAsResource(String fileName) {
         try {
-            Path filePath = this.fileStorageLocation.resolve(fileName).normalize();
+            Path filePath = this.fileStorageLocation.resolve(fileName).resolve("result.xls").normalize();
             Resource resource = new UrlResource(filePath.toUri());
             if(resource.exists()) {
                 return resource;
@@ -70,4 +70,8 @@ public class FileStorageService {
             throw new MyFileNotFoundException("File not found " + fileName, ex);
         }
     }
+
+	public String getCore() {
+        return this.fileStorageLocation.resolve("unixProgram").toFile().getAbsolutePath();
+	}
 }

@@ -1,9 +1,12 @@
 package com.castellanos;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -36,10 +39,11 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class EurekaServerController {
 	private static final Logger logger = LoggerFactory.getLogger(EurekaServerController.class);
 
-    @Autowired
+	@Autowired
 	private FileStorageService fileStorageService;
-	
+
 	private EurekaThreadManager manager = EurekaThreadManager.getInstance();
+
 	private HashMap<Long, UserDao> users = new HashMap<Long, UserDao>();
 
 	private long ids = 0;
@@ -60,15 +64,26 @@ public class EurekaServerController {
 	@GetMapping(path = "/tasks")
 	public @ResponseBody List<String> getAllTasks() {
 		List<String> l = new ArrayList<String>();
+		EurekaTaskRunnable t=null;
 		for (Runnable r : manager.getRunning()) {
-			l.add(r.toString());
+			if (r instanceof EurekaTaskRunnable) {
+				t = (EurekaTaskRunnable) r;
+				l.add(t.toString());
+
+			}
 		}
 		return l;
 	}
 
 	@GetMapping(path = "/tasks/{id}")
 	public @ResponseBody BaseResponse checkStatus(@PathVariable("id") String id) {
-		EurekaTaskRunnable t = manager.getStatus(id);
+		EurekaTaskRunnable t=null;
+		try {
+			t = manager.getStatus(id);
+		} catch (InterruptedException | ExecutionException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		BaseResponse br = new BaseResponse();
 		if (t != null) {
 			br.setCode(100);
@@ -89,18 +104,16 @@ public class EurekaServerController {
 		modelMap.addAttribute("name", name);
 		modelMap.addAttribute("script", script);
 		modelMap.addAttribute("file", file);
-		System.out.println(file.getOriginalFilename()+" "+file.getSize()+" "+file.getContentType());
 		
 		EurekaTask task = new EurekaTask();
-		String fileName = fileStorageService.storeFile(task.getUuid(),file);
+		String path = fileStorageService.storeFile(task.getUuid(),file);
 
-        System.out.println(fileName);
 		task.setName(name);
 		task.setScript(script);
-		task.setDataset(fileName);
+		task.setDataset(path+File.separator+file.getOriginalFilename());
 		task.setUserId(0);
-		System.out.println(task);
-		manager.taskExecute(task);
+		task.setBasePath(path);
+		manager.taskExecute(fileStorageService.getCore() ,task);
 		return task.getUuid();
 	}
 	@GetMapping("/downloadFile/{fileName:.+}")
